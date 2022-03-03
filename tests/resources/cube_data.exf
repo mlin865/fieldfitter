@@ -1,0 +1,37 @@
+EX Version: 3
+Region: /
+!#nodeset datapoints
+Define node template: node1
+Shape. Dimension=0
+#Fields=2
+1) data_coordinates, coordinate, rectangular cartesian, real, #Components=3
+ x. #Values=1 (value)
+ y. #Values=1 (value)
+ z. #Values=1 (value)
+2) temperature, field, real, #Components=1
+ value. #Values=1 (value)
+Node template: node1
+Node: 1
+ 0.3 0.2 0.1
+ 25.0
+Node: 2
+ 0.8 0.3 0.3
+ 35.0
+Node: 3
+ 0.2 0.7 0.3
+ 25.0
+Node: 4
+ 0.7 0.8 0.1
+ 15.0
+Node: 5
+ 0.3 0.2 0.9
+ 65.0
+Node: 6
+ 0.8 0.3 0.7
+ 55.0
+Node: 7
+ 0.2 0.7 0.7
+ 45.0
+Node: 8
+ 0.7 0.8 0.9
+ 90.0
