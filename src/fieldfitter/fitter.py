@@ -39,24 +39,24 @@ class Fitter:
         self._region = None
         self._rawDataRegion = None
         self._fieldmodule = None
-        self._modelFitGroup = None
-        self._modelFitGroupName = None
         self._dataCoordinatesField = None
         self._dataCoordinatesFieldName = None
         self._modelCoordinatesField = None
         self._modelCoordinatesFieldName = None
-        self._fitFields = {}  # map from field name to dict containing per-field parameters, esp. "fit" -> bool
-        self._hasFitFields = {}  # map from field name to bool, True if field has been fitted
+        self._modelFitGroup = None
+        self._modelFitGroupName = None
         # fibre field is used to orient strain/curvature penalties. None=global axes
         self._fibreField = None
         self._fibreFieldName = None
+        self._diagnosticLevel = 0
+        self._fitFields = {}  # map from field name to dict containing per-field parameters, esp. "fit" -> bool
+        self._hasFitFields = {}  # map from field name to bool, True if field has been fitted
+        self._gradient1Penalty = [0.0]  # up to 3 values in x, y, z
+        self._gradient2Penalty = [0.0]  # up to 9 values in xx, xy, xz, yx, yy, yz, zx, zy, zz
         self._dataHostLocationField = None  # stored mesh location field in highest dimension mesh for all data
         self._dataHostCoordinatesField = None  # embedded field giving host coordinates at data location
         self._dataHostDeltaCoordinatesField = None  # self._dataHostCoordinatesField - self._dataCoordinatesField
         self._mesh = []  # [dimension - 1]
-        self._gradient1Penalty = [0.0]  # up to 3 values in x, y, z
-        self._gradient2Penalty = [0.0]  # up to 9 values in xx, xy, xz, yx, yy, yz, zx, zy, zz
-        self._diagnosticLevel = 0
 
     def decodeSettingsJSON(self, s: str):
         """
@@ -65,28 +65,28 @@ class Fitter:
         """
         settings = json.loads(s)
         # field names are read (default to None), fields are found on load
-        self._modelFitGroupName = settings.get("modelFitGroup")
         self._dataCoordinatesFieldName = settings.get("dataCoordinatesField")
         self._modelCoordinatesFieldName = settings.get("modelCoordinatesField")
+        self._modelFitGroupName = settings.get("modelFitGroup")
         self._fibreFieldName = settings.get("fibreField")
+        self._diagnosticLevel = settings["diagnosticLevel"]
         self._fitFields = settings.get("fitFields")
         self._gradient1Penalty = settings.get("gradient1Penalty")
         self._gradient2Penalty = settings.get("gradient2Penalty")
-        self._diagnosticLevel = settings["diagnosticLevel"]
 
     def encodeSettingsJSON(self) -> str:
         """
         :return: String JSON encoding of Fitter settings.
         """
         dct = {
-            "modelFitGroup": self._modelFitGroupName,
             "dataCoordinatesField": self._dataCoordinatesFieldName,
             "modelCoordinatesField": self._modelCoordinatesFieldName,
+            "modelFitGroup": self._modelFitGroupName,
             "fibreField": self._fibreFieldName,
+            "diagnosticLevel": self._diagnosticLevel,
             "fitFields": self._fitFields,
             "gradient1Penalty": self._gradient1Penalty,
-            "gradient2Penalty": self._gradient2Penalty,
-            "diagnosticLevel": self._diagnosticLevel
+            "gradient2Penalty": self._gradient2Penalty
         }
         return json.dumps(dct, sort_keys=False, indent=4)
 
@@ -429,9 +429,9 @@ class Fitter:
         self._region.write(sir)
 
     def _clearFields(self):
-        self._modelFitGroup = None
         self._dataCoordinatesField = None
         self._modelCoordinatesField = None
+        self._modelFitGroup = None
         self._fibreField = None
         self._dataHostLocationField = None
         self._dataHostCoordinatesField = None
