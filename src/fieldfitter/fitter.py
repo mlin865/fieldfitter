@@ -3,6 +3,7 @@ Class for fitting fields on geometrically aligned scaffolds.
 """
 
 import json
+import sys
 
 from opencmiss.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
     orphanFieldByName
@@ -51,6 +52,7 @@ class Fitter:
         self._fibreFieldName = None
         self._dataHostLocationField = None  # stored mesh location field in highest dimension mesh for all data
         self._dataHostCoordinatesField = None  # embedded field giving host coordinates at data location
+        self._dataHostDeltaCoordinatesField = None  # self._dataHostCoordinatesField - self._dataCoordinatesField
         self._mesh = []  # [dimension - 1]
         self._gradient1Penalty = [0.0]  # up to 3 values in x, y, z
         self._gradient2Penalty = [0.0]  # up to 9 values in xx, xy, xz, yx, yy, yz, zx, zy, zz
@@ -151,13 +153,28 @@ class Fitter:
 
     def setFitField(self, name: str, isFit: bool):
         """
-        Set whether to fit the field of name.
+        Set whether to fit the field of name. Field is marked for fitting later.
         :param name: Name of field to modify.
         :param isFit: True to fit, False to not fit.
+        :return: True on success, False if failed.
         """
         dct = self._fitFields.get(name)
         assert dct, "FieldFitter.setFitField: Invalid field name"
+        field = self._fieldmodule.findFieldByName(name)
+        if isFit and (field in (self._dataCoordinatesField, self._modelCoordinatesField)):
+            dct["fit"] = False
+            # print("FieldFitter.  Cannot fit coordinate fields")
+            return False
+        elif not isFit and self._hasFitFields[name]:
+            self._undefineField(field)
         dct["fit"] = isFit
+        return True
+
+    def getFitFieldNames(self):
+        """
+        Get list of field names which could be fit.
+        """
+        return self._fitFields.keys()
 
     def isFieldFitted(self, name: str) -> bool:
         """
@@ -171,17 +188,27 @@ class Fitter:
 
     def fitField(self, name: str) -> bool:
         """
-        Fit field of name to data.
-        :param name: Name of field to fit. Must be set to fit.
+        Fit field of name to data. Marks field for fitting first, which fails if
+        field is not valid to fit.
+        :param name: Name of field to fit.
         :return: True on success, False if failed to fit.
         """
         if not self.isFitField(name):
-            print("FieldFitter.  Field " + name + " is not set to fit")
-            return False
+            if not self.setFitField(name, True):
+                return False
         if self.isFieldFitted(name):
             return True
         field = self._fieldmodule.findFieldByName(name).castFiniteElement()
         return self._defineField(field) and self._fitField(field)
+
+    def undefineField(self, name: str) -> bool:
+        """
+        Undefine field of name from elements. Reverses fitField().
+        """
+        if not self.isFieldFitted(name):
+            return
+        field = self._fieldmodule.findFieldByName(name).castFiniteElement()
+        return self._undefineField(field)
 
     def getGradient1Penalty(self, count: int = None):
         """
@@ -295,6 +322,9 @@ class Fitter:
     def getDataHostCoordinatesField(self):
         return self._dataHostCoordinatesField
 
+    def getDataHostDeltaCoordinatesField(self):
+        return self._dataHostDeltaCoordinatesField
+
     def getFibreField(self):
         return self._fibreField
 
@@ -304,11 +334,14 @@ class Fitter:
         :param fibreField: Fibre angles field available on elements, or None to use
         global x, y, z axes.
         """
+        if fibreField == self._fibreField:
+            return
         assert (fibreField is None) or \
             ((fibreField.getValueType() == Field.VALUE_TYPE_REAL) and (fibreField.getNumberOfComponents() <= 3)), \
             "Scaffoldfitter: Invalid fibre field"
         self._fibreField = fibreField
         self._fibreFieldName = fibreField.getName() if fibreField else None
+        self._clearFittedFields()
 
     def getModelCoordinatesField(self):
         return self._modelCoordinatesField
@@ -344,13 +377,21 @@ class Fitter:
         """
         if modelFitGroup == self._modelFitGroup:
             return
-        assert (modelFitGroup is None) or modelFitGroup.isValid()
-        self._modelFitGroupName = modelFitGroup
+        assert (modelFitGroup is None) or modelFitGroup.castGroup().isValid()
+        self._modelFitGroupName = modelFitGroup.castGroup()
         if modelFitGroup is None:
             self._modelFitGroupName = None
         else:
             self._modelFitGroupName = modelFitGroup.getName()
         self._clearFittedFields()
+
+    def fitAllFields(self):
+        """
+        Fit all currently non-fitted fields.
+        """
+        for fieldName in self._fitFields:
+            if self.isFitField(fieldName):
+                self.fitField(fieldName)
 
     def writeFittedFields(self, fittedFieldsFileName):
         """
@@ -360,10 +401,11 @@ class Fitter:
             sir = self._region.createStreaminformationRegion()
             sir.setRecursionMode(sir.RECURSION_MODE_OFF)
             srf = sir.createStreamresourceFile(fittedFieldsFileName)
-            sir.setResourceGroupName(srf, self._modelFitGroupName)
+            if self._modelFitGroupName:
+                sir.setResourceGroupName(srf, self._modelFitGroupName)
             fieldNames = []
-            for fieldName, fitField in self._fitFields.items():
-                if fitField.isFit():
+            for fieldName in self._fitFields:
+                if self.isFitField(fieldName):
                     fieldNames.append(fieldName)
             sir.setResourceFieldNames(srf, fieldNames)
             sir.setResourceDomainTypes(srf, Field.DOMAIN_TYPE_NODES |
@@ -393,6 +435,7 @@ class Fitter:
         self._fibreField = None
         self._dataHostLocationField = None
         self._dataHostCoordinatesField = None
+        self._dataHostDeltaCoordinatesField = None
         self._mesh = []  # [dimension - 1]
 
     def _clearFittedFields(self):
@@ -604,7 +647,8 @@ class Fitter:
     def _defineDataEmbedding(self):
         """
         Defines self._dataHostCoordinatesField to give the value of self._modelCoordinatesField at
-        embedded location self._dataHostLocationField.
+        embedded location self._dataHostLocationField. Also self._dataHostDeltaCoordinatesField for
+        visualising difference from self._dataCoordinatesField.
         Need to call again if self._modelCoordinatesField is changed.
         """
         if not (self._modelCoordinatesField and self._dataCoordinatesField):
@@ -640,9 +684,14 @@ class Fitter:
             self._dataHostLocationField = findOrCreateFieldStoredMeshLocation(
                 self._fieldmodule, mesh, "data_location_" + mesh.getName(), managed=False)
             orphanFieldByName(self._fieldmodule, "data_host_coordinates")
+            orphanFieldByName(self._fieldmodule, "data_host_delta_coordinates")
             self._dataHostCoordinatesField = self._fieldmodule.createFieldEmbedded(
                 self._modelCoordinatesField, self._dataHostLocationField)
-            self._dataHostCoordinatesField.setName(getUniqueFieldName(self._fieldmodule, "data_host_coordinates"))
+            self._dataHostCoordinatesField.setName(
+                getUniqueFieldName(self._fieldmodule, "data_host_coordinates"))
+            self._dataHostDeltaCoordinatesField = self._dataHostCoordinatesField - self._dataHostCoordinatesField
+            self._dataHostDeltaCoordinatesField.setName(
+                getUniqueFieldName(self._fieldmodule, "data_host_delta_coordinates"))
             # define storage fpr host location on all data points
             datapoints = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
             nodetemplate = datapoints.createNodetemplate()
@@ -657,9 +706,10 @@ class Fitter:
             fieldassignment = self._dataHostLocationField.createFieldassignment(dataFindHostLocation)
             fieldassignment.setNodeset(datapoints)
             result = fieldassignment.assign()
-            assert result in [RESULT_OK, RESULT_WARNING_PART_DONE]
             if result == RESULT_WARNING_PART_DONE:
                 print("FieldFitter warning: not all datapoints have model coordinates field defined on them")
+            elif result != RESULT_OK:
+                print("FieldFitter error: Cannot find host location for datapoints", file=sys.stderr)
             del dataFindHostLocation
 
     def _defineField(self, field: FieldFiniteElement) -> bool:
@@ -725,6 +775,41 @@ class Fitter:
                         return False
                 element = elementIter.next()
         return True
+
+    def _undefineField(self, field: FieldFiniteElement) -> bool:
+        """
+        Undefine field over modelFitGroup or whole mesh if None.
+        :param field: Finite element field to undefine.
+        """
+        mesh = self.getMeshHighestDimension()
+        nodes = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
+        meshGroup = mesh
+        nodesetGroup = nodes
+        if self._modelFitGroup:
+            meshGroup = self._modelFitGroup.getFieldElementGroup(mesh).getMeshGroup()
+            if (not meshGroup.isValid()) or (meshGroup.getSize() == 0):
+                print("Model fit group mesh is empty")
+            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(mesh).getNodesetGroup()
+            if (not nodesetGroup.isValid()) or (nodesetGroup.getSize() == 0):
+                print("Model fit group nodeset is empty")
+        with ChangeManager(self._fieldmodule):
+            # Undefine over elements
+            elementtemplate = meshGroup.createElementtemplate()
+            elementtemplate.undefineField(field)
+            elementIter = meshGroup.createElementiterator()
+            element = elementIter.next()
+            while element.isValid():
+                element.merge(elementtemplate)
+                element = elementIter.next()
+            # Undefine over nodes
+            nodetemplate = nodesetGroup.createNodetemplate()
+            nodetemplate.undefineField(field)
+            nodeIter = nodesetGroup.createNodeiterator()
+            node = nodeIter.next()
+            while node.isValid():
+                node.merge(nodetemplate)
+                node = nodeIter.next()
+            self._hasFitFields[field.getName()] = False
 
     def _fitField(self, field: FieldFiniteElement) -> bool:
         """

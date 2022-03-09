@@ -3,35 +3,45 @@ Region: /
 !#nodeset datapoints
 Define node template: node1
 Shape. Dimension=0
-#Fields=2
+#Fields=3
 1) data_coordinates, coordinate, rectangular cartesian, real, #Components=3
  x. #Values=1 (value)
  y. #Values=1 (value)
  z. #Values=1 (value)
-2) temperature, field, real, #Components=1
+2) pressure, field, real, #Components=1
+ value. #Values=1 (value)
+3) temperature, field, real, #Components=1
  value. #Values=1 (value)
 Node template: node1
 Node: 1
  0.3 0.2 0.1
+ 101300.0
  25.0
 Node: 2
  0.8 0.3 0.3
+ 81300.0
  35.0
 Node: 3
  0.2 0.7 0.3
+ 91300.0
  25.0
 Node: 4
  0.7 0.8 0.1
+ 81300.0
  15.0
 Node: 5
  0.3 0.2 0.9
+ 91300.0
  65.0
 Node: 6
  0.8 0.3 0.7
+ 81300.0
  55.0
 Node: 7
  0.2 0.7 0.7
+ 81300.0
  45.0
 Node: 8
  0.7 0.8 0.9
+ 101300.0
  90.0
