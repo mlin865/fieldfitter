@@ -712,6 +712,50 @@ class Fitter:
                 print("FieldFitter error: Cannot find host location for datapoints", file=sys.stderr)
             del dataFindHostLocation
 
+    def _getFieldTimesequence(self, field: FieldFiniteElement):
+        """
+        Get time sequence used for field on datapoints, on None if none.
+        :param field: Field to query at datapoints.
+        :return: Timesequence or None.
+        """
+        datapoints = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
+        datapoint = datapoints.createNodeiterator().next()
+        if datapoint.isValid():
+            dataNodetemplate = datapoints.createNodetemplate()
+            result = dataNodetemplate.defineFieldFromNode(field, datapoint)
+            if result == RESULT_OK:
+                timesequence = dataNodetemplate.getTimesequence(field)
+                if timesequence.isValid():
+                    return timesequence;
+        return None
+
+    def getFieldTimeCount(self, name: str) -> int:
+        """
+        Get the number of times held for field data.
+        :param name:
+        :return: Number of times, or 0 if not time-varying.
+        """
+        field = self._fieldmodule.findFieldByName(name).castFiniteElement()
+        timesequence = self._getFieldTimesequence(field)
+        if timesequence:
+            return timesequence.getNumberOfTimes()
+        return 0
+
+    def getFieldTimes(self, name: str) -> list:
+        """
+        Get list of times parameters are held for field of name.
+        :param name: Name of field to query.
+        :return: List of times.
+        """
+        field = self._fieldmodule.findFieldByName(name).castFiniteElement()
+        times = []
+        timesequence = self._getFieldTimesequence(field)
+        if timesequence:
+            timeCount = timesequence.getNumberOfTimes()
+            for timeIndex in range(1, timeCount + 1):
+                times.append(timesequence.getTime(timeIndex))
+        return times
+
     def _defineField(self, field: FieldFiniteElement) -> bool:
         """
         Define field over modelFitGroup or whole mesh if None.
@@ -732,6 +776,7 @@ class Fitter:
             if (not nodesetGroup.isValid()) or (nodesetGroup.getSize() == 0):
                 print("Model fit group nodeset is empty")
                 return False
+        timesequence = self._getFieldTimesequence(field)
         with ChangeManager(self._fieldmodule):
             # Define over nodes
             coordinateNodetemplate = nodesetGroup.createNodetemplate()
@@ -753,6 +798,8 @@ class Fitter:
                         valueVersions = coordinateValueVersions
                         for i in range(nodeValueLabelsCount):
                             nodetemplate.setValueNumberOfVersions(field, -1, self._nodeValueLabels[i], valueVersions[i])
+                        if timesequence:
+                            nodetemplate.setTimesequence(field, timesequence)
                     if node.merge(nodetemplate) != RESULT_OK:
                         print("Failed to define node field")
                         return False
@@ -813,7 +860,8 @@ class Fitter:
 
     def _fitField(self, field: FieldFiniteElement) -> bool:
         """
-        Fit field of name to data. Field must have been defined first.
+        Fit field to data, time-varying if data has a time sequence.
+        Field must have been defined first with self._defineField(field).
         :param field: Finite element field to fit.
         :return: True on success, otherwise False.
         """
@@ -821,40 +869,56 @@ class Fitter:
         optimisation.setMethod(Optimisation.METHOD_NEWTON)
         optimisation.addDependentField(field)
 
-        gradientPenaltyObjective = None
         with ChangeManager(self._fieldmodule):
             dataObjective = self._createDataObjectiveField(field)
             result = optimisation.addObjectiveField(dataObjective)
             assert result == RESULT_OK, "Fit Field:  Could not add data objective field"
+            gradientPenaltyObjective = None
             if any(self._gradient1Penalty) or any(self._gradient2Penalty):
                 gradientPenaltyObjective = self._createGradientPenaltyObjectiveField(field)
                 result = optimisation.addObjectiveField(gradientPenaltyObjective)
                 assert result == RESULT_OK, "Fit Field:  Could not add gradient penalty objective field"
 
-        fieldcache = self._fieldmodule.createFieldcache()
-        objectiveFormat = "{:12e}"
-        if self.getDiagnosticLevel() > 0:
-            print("Fit field " + field.getName())
-            result, objective = dataObjective.evaluateReal(fieldcache, 1)
-            print("  BEGIN Data objective", objectiveFormat.format(objective))
-            if gradientPenaltyObjective:
-                result, objective = gradientPenaltyObjective.evaluateReal(
-                    fieldcache, gradientPenaltyObjective.getNumberOfComponents())
-                print("  BEGIN Gradient penalty objective", objectiveFormat.format(objective))
-        result = optimisation.optimise()
-        if self.getDiagnosticLevel() > 1:
-            solutionReport = optimisation.getSolutionReport()
-            print(solutionReport)
-        assert result == RESULT_OK, "Fit Field:  Optimisation failed with result " + str(result)
+        timesequence = self._getFieldTimesequence(field)
+        if timesequence:
+            timeCount = timesequence.getNumberOfTimes()
+        else:
+            timeCount = 1
 
-        if self.getDiagnosticLevel() > 0:
-            result, objective = dataObjective.evaluateReal(fieldcache, 1)
-            print("    END Data objective", objectiveFormat.format(objective))
-            if gradientPenaltyObjective:
-                result, objective = gradientPenaltyObjective.evaluateReal(
-                    fieldcache, gradientPenaltyObjective.getNumberOfComponents())
-                print("    END Gradient penalty objective", objectiveFormat.format(objective))
-            print("--------")
+        objectiveFormat = "{:12e}"
+        fieldcache = self._fieldmodule.createFieldcache()
+        for timeIndex in range(1, timeCount + 1):
+            if timesequence:
+                time = timesequence.getTime(timeIndex)
+                optimisation.setAttributeReal(Optimisation.ATTRIBUTE_FIELD_PARAMETERS_TIME, time)
+                fieldcache.setTime(time)
+
+            if self.getDiagnosticLevel() > 0:
+                name = field.getName()
+                if timesequence:
+                    name += ", time " + str(timeIndex) + "/" + str(timeCount) + " = " + str(time)
+                print("Fit field: " + name)
+                result, objective = dataObjective.evaluateReal(fieldcache, 1)
+                print("  BEGIN Data objective", objectiveFormat.format(objective))
+                if gradientPenaltyObjective:
+                    result, objective = gradientPenaltyObjective.evaluateReal(
+                        fieldcache, gradientPenaltyObjective.getNumberOfComponents())
+                    print("  BEGIN Gradient penalty objective", objectiveFormat.format(objective))
+
+            result = optimisation.optimise()
+            if self.getDiagnosticLevel() > 1:
+                solutionReport = optimisation.getSolutionReport()
+                print(solutionReport)
+            assert result == RESULT_OK, "Fit Field:  Optimisation failed with result " + str(result)
+
+            if self.getDiagnosticLevel() > 0:
+                result, objective = dataObjective.evaluateReal(fieldcache, 1)
+                print("    END Data objective", objectiveFormat.format(objective))
+                if gradientPenaltyObjective:
+                    result, objective = gradientPenaltyObjective.evaluateReal(
+                        fieldcache, gradientPenaltyObjective.getNumberOfComponents())
+                    print("    END Gradient penalty objective", objectiveFormat.format(objective))
+                print("--------")
 
         self._hasFitFields[field.getName()] = True
         return True
