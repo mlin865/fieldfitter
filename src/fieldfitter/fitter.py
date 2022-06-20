@@ -93,6 +93,13 @@ class Fitter:
     def getContext(self):
         return self._context
 
+    def printLog(self):
+        loggerMessageCount = self._logger.getNumberOfMessages()
+        if loggerMessageCount > 0:
+            for i in range(1, loggerMessageCount + 1):
+                print(self._logger.getMessageTypeAtIndex(i), self._logger.getMessageTextAtIndex(i))
+            self._logger.removeAllMessages()
+
     def getDiagnosticLevel(self):
         return self._diagnosticLevel
 
@@ -240,7 +247,9 @@ class Fitter:
         If fewer than 3 values are supplied in the list, the last value is used in all following directions.
         Pass [0.0] to reset/disable.
         """
-        assert isinstance(gradient1Penalty, list), "FieldFitter: setGradient1Penalty requires a list of float"
+        if not isinstance(gradient1Penalty, list):
+            print("FieldFitter: setGradient1Penalty requires a list of float", file=sys.stderr)
+            return
         gradient1Penalty = gradient1Penalty[:3]  # shallow copy, limiting size
         count = len(gradient1Penalty)
         assert count > 0, "FieldFitter: setGradient1Penalty requires a list of at 1-3 floats"
@@ -283,7 +292,9 @@ class Fitter:
         If fewer than 9 values are supplied in the list, the last value is used in all following directions.
         Pass [0.0] to reset/disable.
         """
-        assert isinstance(gradient2Penalty, list), "FieldFitter: setGradient2Penalty requires a list of float"
+        if not isinstance(gradient2Penalty, list):
+            print("FieldFitter: setGradient2Penalty requires a list of float", file=sys.stderr)
+            return
         gradient2Penalty = gradient2Penalty[:9]  # shallow copy, limiting size
         count = len(gradient2Penalty)
         assert count > 0, "FieldFitter: setGradient2Penalty requires a list of at 1-9 floats"
@@ -411,11 +422,6 @@ class Fitter:
             sir.setResourceDomainTypes(srf, Field.DOMAIN_TYPE_NODES |
                                        Field.DOMAIN_TYPE_MESH1D | Field.DOMAIN_TYPE_MESH2D | Field.DOMAIN_TYPE_MESH3D)
             result = self._region.write(sir)
-            # loggerMessageCount = self._logger.getNumberOfMessages()
-            # if loggerMessageCount > 0:
-            #    for i in range(1, loggerMessageCount + 1):
-            #        print(self._logger.getMessageTypeAtIndex(i), self._logger.getMessageTextAtIndex(i))
-            #    self._logger.removeAllMessages()
             assert result == RESULT_OK
 
     def writeData(self, fileName):
@@ -954,6 +960,8 @@ class Fitter:
         if self._fibreField:
             # convert to local fibre directions, with possible dimension reduction for 2D, 1D
             fibreAxes = self._fieldmodule.createFieldFibreAxes(self._fibreField, self._modelCoordinatesField)
+            if not fibreAxes.isValid():
+                self.printLog()
             if dimension == 3:
                 fibreAxesT = self._fieldmodule.createFieldTranspose(3, fibreAxes)
             elif dimension == 2:
@@ -962,18 +970,17 @@ class Fitter:
             else:  # dimension == 1
                 fibreAxesT = self._fieldmodule.createFieldComponent(
                     fibreAxes, [1, 2, 3] if (coordinatesCount == 3) else [1, 2] if (coordinatesCount == 2) else [1])
-        deformationTerm = None
+        gradientTerm = None
         if any(self._gradient1Penalty):
             if self._fibreField:
-                gradient1 = self._fieldmodule.createFieldMatrixMultiply(coordinatesCount, gradient1, fibreAxesT)
+                gradient1 = self._fieldmodule.createFieldMatrixMultiply(componentCount, gradient1raw, fibreAxesT)
             gradient1Penalty = self.getGradient1Penalty(dimension)
             # copy for all components of field
             for c in range(1, componentCount):
                 gradient1Penalty += gradient1Penalty[:dimension]
             wtSqGradient1 = self._fieldmodule.createFieldDotProduct(
                 self._fieldmodule.createFieldConstant(gradient1Penalty), gradient1*gradient1)
-            assert wtSqGradient1.isValid()
-            deformationTerm = wtSqGradient1
+            gradientTerm = wtSqGradient1
         if any(self._gradient2Penalty):
             # don't do gradient of gradient1 with fibres due to slow finite difference evaluation
             gradient2 = self._fieldmodule.createFieldGradient(gradient1raw, self._modelCoordinatesField)
@@ -1003,9 +1010,15 @@ class Fitter:
             wtSqGradient2 = self._fieldmodule.createFieldDotProduct(
                 self._fieldmodule.createFieldConstant(gradient2Penalty), gradient2*gradient2)
             assert wtSqGradient2.isValid()
-            deformationTerm = (deformationTerm + wtSqGradient2) if deformationTerm else wtSqGradient2
-        # future: define over part mesh
+            gradientTerm = (gradientTerm + wtSqGradient2) if gradientTerm else wtSqGradient2
+            if not gradientTerm.isValid():
+                self.printLog()
+                raise AssertionError("Fieldfitter: Failed to get gradient term")
+        # integrate over modelFitGroup, or whole mesh if None.
+        meshGroup = mesh
+        if self._modelFitGroup:
+            meshGroup = self._modelFitGroup.getFieldElementGroup(mesh).getMeshGroup()
         gradientPenaltyObjective =\
-            self._fieldmodule.createFieldMeshIntegral(deformationTerm, self._modelCoordinatesField, mesh)
+            self._fieldmodule.createFieldMeshIntegral(gradientTerm, self._modelCoordinatesField, meshGroup)
         gradientPenaltyObjective.setNumbersOfPoints(numberOfGaussPoints)
         return gradientPenaltyObjective
