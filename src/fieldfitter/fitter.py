@@ -310,19 +310,21 @@ class Fitter:
     def getDataCoordinatesField(self):
         return self._dataCoordinatesField
 
-    def setDataCoordinatesField(self, dataCoordinatesField: Field):
+    def setDataCoordinatesField(self, dataCoordinatesField: Field, clear=True):
         """
-        Clears all fitted fields if changed.
+        Set field giving data coordinates.
         :param dataCoordinatesField: Field giving coordinates for data points, matching model coordinates.
+        :param clear: True to clear all fitted fields; pass false if calling from initial discovery of field.
         """
         if dataCoordinatesField == self._dataCoordinatesField:
             return
         finiteElementField = dataCoordinatesField.castFiniteElement()
         assert finiteElementField.isValid() and (finiteElementField.getNumberOfComponents() == 3)
+        if clear:
+            self._clearFittedFields()
         self._dataCoordinatesFieldName = dataCoordinatesField.getName()
         self._dataCoordinatesField = finiteElementField
         self._defineDataEmbedding()
-        self._clearFittedFields()
 
     def setDataCoordinatesFieldByName(self, dataCoordinatesFieldName):
         self.setDataCoordinatesField(self._fieldmodule.findFieldByName(dataCoordinatesFieldName))
@@ -339,38 +341,42 @@ class Fitter:
     def getFibreField(self):
         return self._fibreField
 
-    def setFibreField(self, fibreField: Field):
+    def setFibreField(self, fibreField: Field, clear=True):
         """
         Set field used to orient 1st and 2nd order smoothing penalties relative to element.
         :param fibreField: Fibre angles field available on elements, or None to use
         global x, y, z axes.
+        :param clear: True to clear all fitted fields; pass false if calling from initial discovery of field.
         """
         if fibreField == self._fibreField:
             return
         assert (fibreField is None) or \
             ((fibreField.getValueType() == Field.VALUE_TYPE_REAL) and (fibreField.getNumberOfComponents() <= 3)), \
-            "Scaffoldfitter: Invalid fibre field"
+            "Fieldfitter: Invalid fibre field"
+        if clear:
+            self._clearFittedFields()
         self._fibreField = fibreField
         self._fibreFieldName = fibreField.getName() if fibreField else None
-        self._clearFittedFields()
 
     def getModelCoordinatesField(self):
         return self._modelCoordinatesField
 
-    def setModelCoordinatesField(self, modelCoordinatesField: Field):
+    def setModelCoordinatesField(self, modelCoordinatesField: Field, clear=True):
         """
-        Clears all fitted fields if changed.
+        Set field giving model coordinates.
         :param modelCoordinatesField: Field giving coordinates over model, matching data coordinates.
+        :param clear: True to clear all fitted fields; pass false if calling from initial discovery of field.
         """
         if modelCoordinatesField == self._modelCoordinatesField:
             return
         finiteElementField = modelCoordinatesField.castFiniteElement()
         mesh = self.getMeshHighestDimension()
         assert finiteElementField.isValid() and (mesh.getDimension() <= finiteElementField.getNumberOfComponents() <= 3)
+        if clear:
+            self._clearFittedFields()
         self._modelCoordinatesField = finiteElementField
         self._modelCoordinatesFieldName = modelCoordinatesField.getName()
         self._defineDataEmbedding()
-        self._clearFittedFields()
 
     def setModelCoordinatesFieldByName(self, modelCoordinatesFieldName):
         self.setModelCoordinatesField(self._fieldmodule.findFieldByName(modelCoordinatesFieldName))
@@ -389,12 +395,13 @@ class Fitter:
         if modelFitGroup == self._modelFitGroup:
             return
         assert (modelFitGroup is None) or modelFitGroup.castGroup().isValid()
-        self._modelFitGroupName = modelFitGroup.castGroup()
+        self._clearFittedFields()  # must do first as iterates over previous group
         if modelFitGroup is None:
+            self._modelFitGroup = None
             self._modelFitGroupName = None
         else:
+            self._modelFitGroup = modelFitGroup.castGroup()
             self._modelFitGroupName = modelFitGroup.getName()
-        self._clearFittedFields()
 
     def fitAllFields(self):
         """
@@ -449,7 +456,9 @@ class Fitter:
         Clear the flags indicating any fields have been fitted.
         """
         for name in self._fitFields:
-            self._hasFitFields[name] = False
+            if self._hasFitFields[name]:
+                field = self._fieldmodule.findFieldByName(name).castFiniteElement()
+                self._undefineField(field)
 
     def _loadModel(self):
         result = self._region.readFile(self._zincModelFileName)
@@ -587,7 +596,7 @@ class Fitter:
                     field = fielditer.next()
                 else:
                     field = None
-        self.setDataCoordinatesField(field)
+        self.setDataCoordinatesField(field, clear=False)
 
     def _discoverFibreField(self):
         """
@@ -607,7 +616,7 @@ class Fitter:
             fibreField = self._fieldmodule.findFieldByName(self._fibreFieldName)
         if not (fibreField and fibreField.isValid()):
             fibreField = None  # in future, could be zeroFibreField?
-        self.setFibreField(fibreField)
+        self.setFibreField(fibreField, clear=False)
 
     def _discoverModelCoordinatesField(self):
         """
@@ -634,7 +643,7 @@ class Fitter:
                 else:
                     field = None
         if field:
-            self.setModelCoordinatesField(field)
+            self.setModelCoordinatesField(field, clear=False)
 
     def _discoverModelFitGroup(self):
         """
@@ -778,7 +787,7 @@ class Fitter:
             if (not meshGroup.isValid()) or (meshGroup.getSize() == 0):
                 print("Model fit group mesh is empty")
                 return False
-            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(mesh).getNodesetGroup()
+            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(nodes).getNodesetGroup()
             if (not nodesetGroup.isValid()) or (nodesetGroup.getSize() == 0):
                 print("Model fit group nodeset is empty")
                 return False
@@ -842,7 +851,7 @@ class Fitter:
             meshGroup = self._modelFitGroup.getFieldElementGroup(mesh).getMeshGroup()
             if (not meshGroup.isValid()) or (meshGroup.getSize() == 0):
                 print("Model fit group mesh is empty")
-            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(mesh).getNodesetGroup()
+            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(nodes).getNodesetGroup()
             if (not nodesetGroup.isValid()) or (nodesetGroup.getSize() == 0):
                 print("Model fit group nodeset is empty")
         with ChangeManager(self._fieldmodule):
