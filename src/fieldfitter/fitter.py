@@ -4,6 +4,7 @@ Class for fitting fields on geometrically aligned scaffolds.
 
 import json
 import sys
+from timeit import default_timer as timer
 
 from opencmiss.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
     orphanFieldByName
@@ -880,6 +881,10 @@ class Fitter:
         :param field: Finite element field to fit.
         :return: True on success, otherwise False.
         """
+        diagnostic_level_1 = self.getDiagnosticLevel() > 0
+        diagnostic_level_2 = self.getDiagnosticLevel() > 1
+        if diagnostic_level_1:
+            print("fitting field:", field.getName())
         optimisation = self._fieldmodule.createOptimisation()
         optimisation.setMethod(Optimisation.METHOD_NEWTON)
         optimisation.addDependentField(field)
@@ -901,14 +906,19 @@ class Fitter:
             timeCount = 1
 
         objectiveFormat = "{:12e}"
+        start_epoch = None
+        if diagnostic_level_1:
+            fit_start_epoch = timer()
         fieldcache = self._fieldmodule.createFieldcache()
         for timeIndex in range(1, timeCount + 1):
+            if diagnostic_level_1:
+                start_epoch = timer()
             if timesequence:
                 time = timesequence.getTime(timeIndex)
                 optimisation.setAttributeReal(Optimisation.ATTRIBUTE_FIELD_PARAMETERS_TIME, time)
                 fieldcache.setTime(time)
 
-            if self.getDiagnosticLevel() > 0:
+            if diagnostic_level_1:
                 name = field.getName()
                 if timesequence:
                     name += ", time " + str(timeIndex) + "/" + str(timeCount) + " = " + str(time)
@@ -921,19 +931,23 @@ class Fitter:
                     print("  BEGIN Gradient penalty objective", objectiveFormat.format(objective))
 
             result = optimisation.optimise()
-            if self.getDiagnosticLevel() > 1:
+            if diagnostic_level_2:
                 solutionReport = optimisation.getSolutionReport()
                 print(solutionReport)
             assert result == RESULT_OK, "Fit Field:  Optimisation failed with result " + str(result)
 
-            if self.getDiagnosticLevel() > 0:
+            if diagnostic_level_1:
                 result, objective = dataObjective.evaluateReal(fieldcache, 1)
                 print("    END Data objective", objectiveFormat.format(objective))
                 if gradientPenaltyObjective:
                     result, objective = gradientPenaltyObjective.evaluateReal(
                         fieldcache, gradientPenaltyObjective.getNumberOfComponents())
                     print("    END Gradient penalty objective", objectiveFormat.format(objective))
+                print(f"elapsed time: {timer() - start_epoch} (s)")
                 print("--------")
+
+        if diagnostic_level_1:
+            print(f"total elapsed time: {timer() - fit_start_epoch} (s)")
 
         self._hasFitFields[field.getName()] = True
         return True
