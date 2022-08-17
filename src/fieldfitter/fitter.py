@@ -906,9 +906,13 @@ class Fitter:
             timeCount = 1
 
         objectiveFormat = "{:12e}"
+
+        time = None
         start_epoch = None
+        fit_start_epoch = None
         if diagnostic_level_1:
             fit_start_epoch = timer()
+
         fieldcache = self._fieldmodule.createFieldcache()
         for timeIndex in range(1, timeCount + 1):
             if diagnostic_level_1:
