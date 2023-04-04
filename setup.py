@@ -21,16 +21,16 @@ readme = readfile("README.rst", True)
 # into the 'requirements.txt' file.
 requires = [
     # minimal requirements listing
-    "opencmiss.utils >= 0.3",
-    "opencmiss.zinc >= 3.7"
+    "cmlibs.utils >= 0.3",
+    "cmlibs.zinc >= 3.7"
 ]
 readme.extend(['', 'License', '=======', '', '::', ''])
 source_license = readfile("LICENSE")
 
 setup(
     name="fieldfitter",
-    version="0.2.0",
-    description="Scaffold/model field fitting library using OpenCMISS-Zinc.",
+    version="0.3.0",
+    description="Scaffold/model field fitting library using Zinc.",
     long_description="\n".join(readme) + source_license,
     long_description_content_type="text/x-rst",
     classifiers=[

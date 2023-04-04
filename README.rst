@@ -1,7 +1,7 @@
 Field Fitter
 ============
 
-Scaffold/model field fitting library using OpenCMISS-Zinc.
+Scaffold/model field fitting library using Zinc.
 
 Takes as input a Zinc model file and a Zinc data file.
 Model requires a model coordinates field, and data a data coordinates field

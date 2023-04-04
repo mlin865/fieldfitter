@@ -2,8 +2,8 @@
 import os
 import unittest
 from fieldfitter.fitter import Fitter
-from opencmiss.utils.zinc.finiteelement import evaluate_field_nodeset_range
-from opencmiss.zinc.field import Field
+from cmlibs.utils.zinc.finiteelement import evaluate_field_nodeset_range
+from cmlibs.zinc.field import Field
 
 
 here = os.path.abspath(os.path.dirname(__file__))
