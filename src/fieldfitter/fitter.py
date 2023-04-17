@@ -6,15 +6,15 @@ import json
 import sys
 from timeit import default_timer as timer
 
-from opencmiss.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
+from cmlibs.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
     orphanFieldByName
-from opencmiss.utils.zinc.finiteelement import getMaximumNodeIdentifier
-from opencmiss.utils.zinc.general import ChangeManager
-from opencmiss.zinc.context import Context
-from opencmiss.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement
-from opencmiss.zinc.node import Node
-from opencmiss.zinc.optimisation import Optimisation
-from opencmiss.zinc.result import RESULT_OK, RESULT_WARNING_PART_DONE
+from cmlibs.utils.zinc.finiteelement import getMaximumNodeIdentifier
+from cmlibs.utils.zinc.general import ChangeManager
+from cmlibs.zinc.context import Context
+from cmlibs.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement
+from cmlibs.zinc.node import Node
+from cmlibs.zinc.optimisation import Optimisation
+from cmlibs.zinc.result import RESULT_OK, RESULT_WARNING_PART_DONE
 
 
 class Fitter:
