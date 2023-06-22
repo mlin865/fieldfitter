@@ -683,20 +683,20 @@ class Fitter:
                 dataFindHostLocationExact = dataFindHostLocation
                 dataFindHostLocationExact.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_EXACT)
                 mesh2d = self.getMesh(2)
-                boundaryElementGroup = self._fieldmodule.createFieldElementGroup(mesh2d)
-                boundaryMesh = boundaryElementGroup.getMeshGroup()
-                boundaryMesh.addElementsConditional(self._fieldmodule.createFieldIsExterior())
+                boundaryGroup = self._fieldmodule.createFieldGroup()
+                boundaryMeshGroup = boundaryGroup.createMeshGroup(mesh2d)
+                boundaryMeshGroup.addElementsConditional(self._fieldmodule.createFieldIsExterior())
                 dataFindHostBoundaryLocationNearest = self._fieldmodule.createFieldFindMeshLocation(
                     self._dataCoordinatesField, self._modelCoordinatesField, mesh)
                 dataFindHostBoundaryLocationNearest.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
-                assert RESULT_OK == dataFindHostBoundaryLocationNearest.setSearchMesh(boundaryMesh)
+                assert RESULT_OK == dataFindHostBoundaryLocationNearest.setSearchMesh(boundaryMeshGroup)
                 dataFindHostLocation = self._fieldmodule.createFieldIf(
                     self._fieldmodule.createFieldIsDefined(dataFindHostLocationExact),
                     dataFindHostLocationExact, dataFindHostBoundaryLocationNearest)
-                del boundaryElementGroup
-                del boundaryMesh
                 del dataFindHostBoundaryLocationNearest
                 del dataFindHostLocationExact
+                del boundaryMeshGroup
+                del boundaryGroup
             self._dataHostLocationField = findOrCreateFieldStoredMeshLocation(
                 self._fieldmodule, mesh, "data_location_" + mesh.getName(), managed=False)
             orphanFieldByName(self._fieldmodule, "data_host_coordinates")
@@ -784,11 +784,11 @@ class Fitter:
         meshGroup = mesh
         nodesetGroup = nodes
         if self._modelFitGroup:
-            meshGroup = self._modelFitGroup.getFieldElementGroup(mesh).getMeshGroup()
+            meshGroup = self._modelFitGroup.getMeshGroup(mesh)
             if (not meshGroup.isValid()) or (meshGroup.getSize() == 0):
                 print("Model fit group mesh is empty")
                 return False
-            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(nodes).getNodesetGroup()
+            nodesetGroup = self._modelFitGroup.getNodesetGroup(nodes)
             if (not nodesetGroup.isValid()) or (nodesetGroup.getSize() == 0):
                 print("Model fit group nodeset is empty")
                 return False
@@ -849,10 +849,10 @@ class Fitter:
         meshGroup = mesh
         nodesetGroup = nodes
         if self._modelFitGroup:
-            meshGroup = self._modelFitGroup.getFieldElementGroup(mesh).getMeshGroup()
+            meshGroup = self._modelFitGroup.getMeshGroup(mesh)
             if (not meshGroup.isValid()) or (meshGroup.getSize() == 0):
                 print("Model fit group mesh is empty")
-            nodesetGroup = self._modelFitGroup.getFieldNodeGroup(nodes).getNodesetGroup()
+            nodesetGroup = self._modelFitGroup.getNodesetGroup(nodes)
             if (not nodesetGroup.isValid()) or (nodesetGroup.getSize() == 0):
                 print("Model fit group nodeset is empty")
         with ChangeManager(self._fieldmodule):
@@ -1044,7 +1044,7 @@ class Fitter:
         # integrate over modelFitGroup, or whole mesh if None.
         meshGroup = mesh
         if self._modelFitGroup:
-            meshGroup = self._modelFitGroup.getFieldElementGroup(mesh).getMeshGroup()
+            meshGroup = self._modelFitGroup.getMeshGroup(mesh)
         gradientPenaltyObjective =\
             self._fieldmodule.createFieldMeshIntegral(gradientTerm, self._modelCoordinatesField, meshGroup)
         gradientPenaltyObjective.setNumbersOfPoints(numberOfGaussPoints)
