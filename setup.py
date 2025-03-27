@@ -21,7 +21,7 @@ readme = readfile("README.rst", True)
 # into the 'requirements.txt' file.
 requires = [
     # minimal requirements listing
-    "cmlibs.utils >= 0.6",
+    "cmlibs.utils >= 0.12.0",
     "cmlibs.zinc >= 4.0"
 ]
 readme.extend(['', 'License', '=======', '', '::', ''])

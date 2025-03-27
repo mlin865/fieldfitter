@@ -1,5 +1,6 @@
-# import math
+import logging
 import os
+import sys
 import unittest
 from fieldfitter.fitter import Fitter
 from cmlibs.utils.zinc.finiteelement import evaluate_field_nodeset_range
@@ -7,6 +8,9 @@ from cmlibs.zinc.field import Field
 
 
 here = os.path.abspath(os.path.dirname(__file__))
+
+
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 def assertAlmostEqualList(testcase, actualList, expectedList, delta):

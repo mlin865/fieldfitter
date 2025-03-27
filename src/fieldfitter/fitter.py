@@ -8,7 +8,8 @@ from timeit import default_timer as timer
 
 from cmlibs.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
     orphanFieldByName
-from cmlibs.utils.zinc.finiteelement import getMaximumNodeIdentifier
+from cmlibs.utils.zinc.group import match_fitting_group_names
+from cmlibs.utils.zinc.region import copy_fitting_data
 from cmlibs.utils.zinc.general import ChangeManager
 from cmlibs.zinc.context import Context
 from cmlibs.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement
@@ -479,76 +480,9 @@ class Fitter:
         assert result == RESULT_OK, "Failed to load data file " + str(self._zincDataFileName)
         dataFieldmodule = self._rawDataRegion.getFieldmodule()
         with ChangeManager(dataFieldmodule):
-            # rename data groups to match model
-            # future: match with annotation terms
-            modelGroupNames = [group.getName() for group in getGroupList(self._fieldmodule)]
-            writeDiagnostics = self.getDiagnosticLevel() > 0
-            for dataGroup in getGroupList(dataFieldmodule):
-                dataGroupName = dataGroup.getName()
-                compareName = dataGroupName.strip().casefold()
-                for modelGroupName in modelGroupNames:
-                    if modelGroupName == dataGroupName:
-                        if writeDiagnostics:
-                            print("Load data: Data group '" + dataGroupName + "' found in model")
-                        break
-                    elif modelGroupName.strip().casefold() == compareName:
-                        result = dataGroup.setName(modelGroupName)
-                        if result == RESULT_OK:
-                            if writeDiagnostics:
-                                print("Load data: Data group '" + dataGroupName + "' found in model as '" +
-                                      modelGroupName + "'. Renaming to match.")
-                        else:
-                            print("Error: Load data: Data group '" + dataGroupName + "' found in model as '" +
-                                  modelGroupName + "'. Renaming to match FAILED.")
-                            if dataFieldmodule.findFieldByName(modelGroupName).isValid():
-                                print("    Reason: field of that name already exists.")
-                        break
-                else:
-                    if writeDiagnostics:
-                        print("Load data: Data group '" + dataGroupName + "' not found in model")
-            # if there are both nodes and datapoints, offset datapoint identifiers to ensure different
-            nodes = dataFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
-            if nodes.getSize() > 0:
-                datapoints = dataFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
-                if datapoints.getSize() > 0:
-                    maximumDatapointIdentifier = max(0, getMaximumNodeIdentifier(datapoints))
-                    maximumNodeIdentifier = max(0, getMaximumNodeIdentifier(nodes))
-                    # this assumes identifiers are in low ranges and can be improved if there is a problem:
-                    identifierOffset = 100000
-                    while (maximumDatapointIdentifier > identifierOffset) or (maximumNodeIdentifier > identifierOffset):
-                        assert identifierOffset < 1000000000, "Invalid node and datapoint identifier ranges"
-                        identifierOffset *= 10
-                    while True:
-                        # logic relies on datapoints being in identifier order
-                        datapoint = datapoints.createNodeiterator().next()
-                        identifier = datapoint.getIdentifier()
-                        if identifier >= identifierOffset:
-                            break
-                        result = datapoint.setIdentifier(identifier + identifierOffset)
-                        assert result == RESULT_OK, "Failed to offset datapoint identifier"
-                # transfer nodes as datapoints to self._region
-                sir = self._rawDataRegion.createStreaminformationRegion()
-                srm = sir.createStreamresourceMemory()
-                sir.setResourceDomainTypes(srm, Field.DOMAIN_TYPE_NODES)
-                self._rawDataRegion.write(sir)
-                result, buffer = srm.getBuffer()
-                assert result == RESULT_OK, "Failed to write nodes"
-                buffer = buffer.replace(bytes("!#nodeset nodes", "utf-8"), bytes("!#nodeset datapoints", "utf-8"))
-                sir = self._region.createStreaminformationRegion()
-                sir.createStreamresourceMemoryBuffer(buffer)
-                result = self._region.read(sir)
-                assert result == RESULT_OK, "Failed to load nodes as datapoints"
-        # transfer datapoints to self._region
-        sir = self._rawDataRegion.createStreaminformationRegion()
-        srm = sir.createStreamresourceMemory()
-        sir.setResourceDomainTypes(srm, Field.DOMAIN_TYPE_DATAPOINTS)
-        self._rawDataRegion.write(sir)
-        result, buffer = srm.getBuffer()
-        assert result == RESULT_OK, "Failed to write datapoints"
-        sir = self._region.createStreaminformationRegion()
-        sir.createStreamresourceMemoryBuffer(buffer)
-        result = self._region.read(sir)
-        assert result == RESULT_OK, "Failed to load datapoints"
+            match_fitting_group_names(dataFieldmodule, self._fieldmodule,
+                                      log_diagnostics=self.getDiagnosticLevel() > 0)
+            copy_fitting_data(self._region, self._rawDataRegion)
         self._discoverDataCoordinatesField()
         self._updateFitFields()
 
