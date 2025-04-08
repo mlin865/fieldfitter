@@ -6,7 +6,7 @@ import json
 import sys
 from timeit import default_timer as timer
 
-from cmlibs.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
+from cmlibs.utils.zinc.field import find_or_create_field_stored_mesh_location, getUniqueFieldName, \
     orphanFieldByName
 from cmlibs.utils.zinc.group import match_fitting_group_names
 from cmlibs.utils.zinc.region import copy_fitting_data
@@ -50,7 +50,6 @@ class Fitter:
             self._fieldmodule = None
         self._zincVersion = self._context.getVersion()[1]
         self._logger = self._context.getLogger()
-        self._region = None
         self._rawDataRegion = None
         self._dataCoordinatesField = None
         self._dataCoordinatesFieldName = None
@@ -69,6 +68,14 @@ class Fitter:
         self._dataHostLocationField = None  # stored mesh location field in highest dimension mesh for all data
         self._dataHostCoordinatesField = None  # embedded field giving host coordinates at data location
         self._dataHostDeltaCoordinatesField = None  # self._dataHostCoordinatesField - self._dataCoordinatesField
+
+    def cleanup(self):
+        self._clearFields()
+        self._rawDataRegion = None
+        self._fieldmodule = None
+        self._region = None
+        self._logger = None
+        self._context = None
 
     def decodeSettingsJSON(self, s: str):
         """
@@ -643,7 +650,7 @@ class Fitter:
                 del dataFindHostLocationExact
                 del boundaryMeshGroup
                 del boundaryGroup
-            self._dataHostLocationField = findOrCreateFieldStoredMeshLocation(
+            self._dataHostLocationField = find_or_create_field_stored_mesh_location(
                 self._fieldmodule, mesh, "data_location_" + mesh.getName(), managed=False)
             orphanFieldByName(self._fieldmodule, "data_host_coordinates")
             orphanFieldByName(self._fieldmodule, "data_host_delta_coordinates")
@@ -651,7 +658,7 @@ class Fitter:
                 self._modelCoordinatesField, self._dataHostLocationField)
             self._dataHostCoordinatesField.setName(
                 getUniqueFieldName(self._fieldmodule, "data_host_coordinates"))
-            self._dataHostDeltaCoordinatesField = self._dataHostCoordinatesField - self._dataHostCoordinatesField
+            self._dataHostDeltaCoordinatesField = self._dataCoordinatesField - self._dataHostCoordinatesField
             self._dataHostDeltaCoordinatesField.setName(
                 getUniqueFieldName(self._fieldmodule, "data_host_delta_coordinates"))
             # define storage fpr host location on all data points
@@ -688,7 +695,7 @@ class Fitter:
             if result == RESULT_OK:
                 timesequence = dataNodetemplate.getTimesequence(field)
                 if timesequence.isValid():
-                    return timesequence;
+                    return timesequence
         return None
 
     def getFieldTimeCount(self, name: str) -> int:
@@ -914,6 +921,7 @@ class Fitter:
         datapoints = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
         dataProjectionObjective = self._fieldmodule.createFieldNodesetSum(deltaSq, datapoints)
         dataProjectionObjective.setElementMapField(self._dataHostLocationField)
+        dataProjectionObjective.setName("data objective")
         return dataProjectionObjective
 
     def _createGradientPenaltyObjectiveField(self, field: FieldFiniteElement):
@@ -994,4 +1002,5 @@ class Fitter:
         gradientPenaltyObjective =\
             self._fieldmodule.createFieldMeshIntegral(gradientTerm, self._modelCoordinatesField, meshGroup)
         gradientPenaltyObjective.setNumbersOfPoints(numberOfGaussPoints)
+        gradientPenaltyObjective.setName("gradient penalty objective")
         return gradientPenaltyObjective
