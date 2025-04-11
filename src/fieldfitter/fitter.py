@@ -140,7 +140,7 @@ class Fitter:
         """
         return self._fieldmodule.findMeshByDimension(dimension)
 
-    def getHighestDimensionMesh(self):
+    def getMeshHighestDimension(self):
         """
         :return: Highest dimension mesh with elements in it, or None if none.
         """
@@ -393,7 +393,7 @@ class Fitter:
         if modelCoordinatesField == self._modelCoordinatesField:
             return
         finiteElementField = modelCoordinatesField.castFiniteElement()
-        mesh = self.getHighestDimensionMesh()
+        mesh = self.getMeshHighestDimension()
         assert finiteElementField.isValid() and (mesh.getDimension() <= finiteElementField.getNumberOfComponents() <= 3)
         if clear:
             self._clearFittedFields()
@@ -581,7 +581,7 @@ class Fitter:
         if self._modelCoordinatesFieldName:
             field = self._fieldmodule.findFieldByName(self._modelCoordinatesFieldName)
         else:
-            mesh = self.getHighestDimensionMesh()
+            mesh = self.getMeshHighestDimension()
             element = mesh.createElementiterator().next()
             if element.isValid():
                 fieldcache = self._fieldmodule.createFieldcache()
@@ -626,7 +626,7 @@ class Fitter:
             # Find mesh location at nearest point in mesh
             # workaround nearest not working on 3D elements by finding nearest on boundary if exact not found
             # Note: not finding exact/nearest on self._modelFitGroup; I assume it contains all found locations
-            mesh = self.getHighestDimensionMesh()
+            mesh = self.getMeshHighestDimension()
             meshDimension = mesh.getDimension()
             dataFindHostLocation = self._fieldmodule.createFieldFindMeshLocation(
                 self._dataCoordinatesField, self._modelCoordinatesField, mesh)
@@ -732,7 +732,7 @@ class Fitter:
         :param field: Finite element field to define.
         :return: True on success, otherwise False.
         """
-        mesh = self.getHighestDimensionMesh()
+        mesh = self.getMeshHighestDimension()
         nodes = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
         meshGroup = mesh
         nodesetGroup = nodes
@@ -797,7 +797,7 @@ class Fitter:
         Undefine field over modelFitGroup or whole mesh if None.
         :param field: Finite element field to undefine.
         """
-        mesh = self.getHighestDimensionMesh()
+        mesh = self.getMeshHighestDimension()
         nodes = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
         meshGroup = mesh
         nodesetGroup = nodes
@@ -931,7 +931,7 @@ class Fitter:
         :return: Zinc field.
         """
         numberOfGaussPoints = 3
-        mesh = self.getHighestDimensionMesh()
+        mesh = self.getMeshHighestDimension()
         componentCount = field.getNumberOfComponents()
         dimension = mesh.getDimension()
         coordinatesCount = self._modelCoordinatesField.getNumberOfComponents()
