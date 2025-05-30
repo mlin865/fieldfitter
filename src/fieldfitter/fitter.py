@@ -6,7 +6,7 @@ import json
 import sys
 from timeit import default_timer as timer
 
-from cmlibs.utils.zinc.field import getGroupList, findOrCreateFieldStoredMeshLocation, getUniqueFieldName, \
+from cmlibs.utils.zinc.field import find_or_create_field_stored_mesh_location, getUniqueFieldName, \
     orphanFieldByName
 from cmlibs.utils.zinc.group import match_fitting_group_names
 from cmlibs.utils.zinc.region import copy_fitting_data
@@ -16,6 +16,7 @@ from cmlibs.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement
 from cmlibs.zinc.node import Node
 from cmlibs.zinc.optimisation import Optimisation
 from cmlibs.zinc.result import RESULT_OK, RESULT_WARNING_PART_DONE
+from cmlibs.zinc.region import Region
 
 
 class Fitter:
@@ -28,19 +29,28 @@ class Fitter:
                         Node.VALUE_LABEL_D_DS3, Node.VALUE_LABEL_D2_DS1DS3,
                         Node.VALUE_LABEL_D2_DS2DS3, Node.VALUE_LABEL_D3_DS1DS2DS3]
 
-    def __init__(self, zincModelFileName: str, zincDataFileName: str):
+    def __init__(self, zincModelFileName: str=None, zincDataFileName: str=None, region: Region=None):
         """
-        :param zincModelFileName: Name of zinc file supplying model to define fields on.
-        :param zincDataFileName: Name of zinc file supplying data to fit to.
+        Create instance of Fitter either from model and data file names, or the model/fit region.
+        :param zincModelFileName: Name of zinc file supplying model to fit, or None if supplying region.
+        :param zincDataFileName: Name of zinc filed supplying data to fit to, or None if supplying region.
+        :param region: Region in which to build model and perform fitting, or None if supplying file names.
         """
         self._zincModelFileName = zincModelFileName
         self._zincDataFileName = zincDataFileName
-        self._context = Context("Fieldfitter")
+        if region:
+            assert (zincModelFileName is None) and (zincDataFileName is None)
+            self._context = region.getContext()
+            self._region = region
+            self._fieldmodule = region.getFieldmodule()
+        else:
+            assert region is None
+            self._context = Context("Fieldfitter")
+            self._region = None  # created by call to load()
+            self._fieldmodule = None
         self._zincVersion = self._context.getVersion()[1]
         self._logger = self._context.getLogger()
-        self._region = None
         self._rawDataRegion = None
-        self._fieldmodule = None
         self._dataCoordinatesField = None
         self._dataCoordinatesFieldName = None
         self._modelCoordinatesField = None
@@ -58,7 +68,14 @@ class Fitter:
         self._dataHostLocationField = None  # stored mesh location field in highest dimension mesh for all data
         self._dataHostCoordinatesField = None  # embedded field giving host coordinates at data location
         self._dataHostDeltaCoordinatesField = None  # self._dataHostCoordinatesField - self._dataCoordinatesField
-        self._mesh = []  # [dimension - 1]
+
+    def cleanup(self):
+        self._clearFields()
+        self._rawDataRegion = None
+        self._fieldmodule = None
+        self._region = None
+        self._logger = None
+        self._context = None
 
     def decodeSettingsJSON(self, s: str):
         """
@@ -117,15 +134,18 @@ class Fitter:
         return self._fieldmodule
 
     def getMesh(self, dimension):
-        assert 1 <= dimension <= 3
-        return self._mesh[dimension - 1]
+        """
+        :param dimension: Mesh dimension.
+        :return: Zinc Mesh; invalid if dimension not from 1 to 3.
+        """
+        return self._fieldmodule.findMeshByDimension(dimension)
 
     def getMeshHighestDimension(self):
         """
         :return: Highest dimension mesh with elements in it, or None if none.
         """
-        for d in range(2, -1, -1):
-            mesh = self._mesh[d]
+        for dimension in range(3, 0, -1):
+            mesh = self._fieldmodule.findMeshByDimension(dimension)
             if mesh.getSize() > 0:
                 return mesh
         return None
@@ -143,6 +163,7 @@ class Fitter:
         """
         Read model and data and define initial projections.
         """
+        assert self._zincModelFileName and self._zincDataFileName
         self._clearFields()
         self._region = self._context.createRegion()
         self._fieldmodule = self._region.getFieldmodule()
@@ -451,7 +472,6 @@ class Fitter:
         self._dataHostLocationField = None
         self._dataHostCoordinatesField = None
         self._dataHostDeltaCoordinatesField = None
-        self._mesh = []  # [dimension - 1]
 
     def _clearFittedFields(self):
         """
@@ -465,7 +485,6 @@ class Fitter:
     def _loadModel(self):
         result = self._region.readFile(self._zincModelFileName)
         assert result == RESULT_OK, "Failed to load model file" + str(self._zincModelFileName)
-        self._mesh = [self._fieldmodule.findMeshByDimension(d + 1) for d in range(3)]
         self._discoverModelCoordinatesField()
         self._discoverModelFitGroup()
         self._discoverFibreField()
@@ -484,9 +503,9 @@ class Fitter:
                                       log_diagnostics=self.getDiagnosticLevel() > 0)
             copy_fitting_data(self._region, self._rawDataRegion)
         self._discoverDataCoordinatesField()
-        self._updateFitFields()
+        self.updateFitFields()
 
-    def _updateFitFields(self):
+    def updateFitFields(self):
         """
         Build fitFields list, merging any previous stored settings.
         Reset flag marking whether field is fitted.
@@ -631,7 +650,7 @@ class Fitter:
                 del dataFindHostLocationExact
                 del boundaryMeshGroup
                 del boundaryGroup
-            self._dataHostLocationField = findOrCreateFieldStoredMeshLocation(
+            self._dataHostLocationField = find_or_create_field_stored_mesh_location(
                 self._fieldmodule, mesh, "data_location_" + mesh.getName(), managed=False)
             orphanFieldByName(self._fieldmodule, "data_host_coordinates")
             orphanFieldByName(self._fieldmodule, "data_host_delta_coordinates")
@@ -639,7 +658,7 @@ class Fitter:
                 self._modelCoordinatesField, self._dataHostLocationField)
             self._dataHostCoordinatesField.setName(
                 getUniqueFieldName(self._fieldmodule, "data_host_coordinates"))
-            self._dataHostDeltaCoordinatesField = self._dataHostCoordinatesField - self._dataHostCoordinatesField
+            self._dataHostDeltaCoordinatesField = self._dataCoordinatesField - self._dataHostCoordinatesField
             self._dataHostDeltaCoordinatesField.setName(
                 getUniqueFieldName(self._fieldmodule, "data_host_delta_coordinates"))
             # define storage fpr host location on all data points
@@ -676,7 +695,7 @@ class Fitter:
             if result == RESULT_OK:
                 timesequence = dataNodetemplate.getTimesequence(field)
                 if timesequence.isValid():
-                    return timesequence;
+                    return timesequence
         return None
 
     def getFieldTimeCount(self, name: str) -> int:
@@ -902,6 +921,7 @@ class Fitter:
         datapoints = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
         dataProjectionObjective = self._fieldmodule.createFieldNodesetSum(deltaSq, datapoints)
         dataProjectionObjective.setElementMapField(self._dataHostLocationField)
+        dataProjectionObjective.setName("data objective")
         return dataProjectionObjective
 
     def _createGradientPenaltyObjectiveField(self, field: FieldFiniteElement):
@@ -982,4 +1002,5 @@ class Fitter:
         gradientPenaltyObjective =\
             self._fieldmodule.createFieldMeshIntegral(gradientTerm, self._modelCoordinatesField, meshGroup)
         gradientPenaltyObjective.setNumbersOfPoints(numberOfGaussPoints)
+        gradientPenaltyObjective.setName("gradient penalty objective")
         return gradientPenaltyObjective
