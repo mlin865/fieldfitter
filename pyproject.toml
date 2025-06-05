@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools_scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools-git-versioning]
+enabled = true
+
+[project]
+name = "fieldfitter"
+dynamic = ["version"]
+keywords = ["Medical", "Physiology", "Anatomical", "Mesh", "Finite Element", "Fitting", "SPARC"]
+readme = "README.rst"
+license = "Apache-2.0"
+authors = [
+    { name="Richard Christie", email="r.christie@auckland.ac.nz" },
+]
+dependencies = [
+    "cmlibs.utils >= 0.12.0",
+    "cmlibs.zinc >= 4.1"
+]
+description = "Scaffold/model field fitting library using Zinc."
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+[tool.setuptools_scm]
