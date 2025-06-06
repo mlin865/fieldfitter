@@ -339,7 +339,7 @@ class Fitter:
         :param dataCoordinatesField: Field giving coordinates for data points, matching model coordinates.
         :param clear: True to clear all fitted fields; pass false if calling from initial discovery of field.
         """
-        if dataCoordinatesField == self._dataCoordinatesField:
+        if (self._dataCoordinatesField is not None) and (dataCoordinatesField == self._dataCoordinatesField):
             return
         finiteElementField = dataCoordinatesField.castFiniteElement()
         assert finiteElementField.isValid() and (finiteElementField.getNumberOfComponents() == 3)
@@ -371,7 +371,7 @@ class Fitter:
         global x, y, z axes.
         :param clear: True to clear all fitted fields; pass false if calling from initial discovery of field.
         """
-        if fibreField == self._fibreField:
+        if (self._fibreField is not None) and (fibreField == self._fibreField):
             return
         assert (fibreField is None) or \
             ((fibreField.getValueType() == Field.VALUE_TYPE_REAL) and (fibreField.getNumberOfComponents() <= 3)), \
@@ -390,7 +390,7 @@ class Fitter:
         :param modelCoordinatesField: Field giving coordinates over model, matching data coordinates.
         :param clear: True to clear all fitted fields; pass false if calling from initial discovery of field.
         """
-        if modelCoordinatesField == self._modelCoordinatesField:
+        if (self._modelCoordinatesField is not None) and (modelCoordinatesField == self._modelCoordinatesField):
             return
         finiteElementField = modelCoordinatesField.castFiniteElement()
         mesh = self.getMeshHighestDimension()
@@ -415,7 +415,7 @@ class Fitter:
         Set group to define and fit field over. Clears all fitted fields if changed.
         :param modelFitGroup: Zinc FieldGroup to limit fit to, or None to fit to whole mesh.
         """
-        if modelFitGroup == self._modelFitGroup:
+        if (self._modelFitGroup is not None) and (modelFitGroup == self._modelFitGroup):
             return
         assert (modelFitGroup is None) or modelFitGroup.castGroup().isValid()
         self._clearFittedFields()  # must do first as iterates over previous group
