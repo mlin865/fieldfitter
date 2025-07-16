@@ -94,10 +94,12 @@ class FieldFitterTestCase(unittest.TestCase):
             minPressure, maxPressure = evaluate_field_nodeset_range(pressure, nodes)
             self.assertAlmostEqual(minPressure, 74871.3716089433, delta=TOL)
             self.assertAlmostEqual(maxPressure, 115951.48884538251, delta=TOL)
-
             minDeltaPressure, maxDeltaPressure = evaluate_field_nodeset_range(deltaPressure, datapoints)
             self.assertAlmostEqual(minDeltaPressure, -656.3450771958596, delta=TOL)
             self.assertAlmostEqual(maxDeltaPressure, 483.561326447787, delta=TOL)
+            rmsError, maxError = fitter.getFieldDataRMSAndMaximumErrors("pressure")
+            self.assertAlmostEqual(rmsError, 347.71176371343245, delta=TOL)
+            self.assertAlmostEqual(maxError, 656.3450771958596, delta=TOL)
 
             temperature = fieldmodule.findFieldByName("temperature")
             timeField = fieldmodule.createFieldConstant(0.0)
@@ -106,10 +108,17 @@ class FieldFitterTestCase(unittest.TestCase):
             deltaTimeTemperature = timeTemperature - hostTimeTemperature
 
             TOL = 1.0E-7
+            # min, max, min delta, max delta, rms, max magnitude
             expectedTemperatures = [
-                [3.332641568558043, 118.89672562263947, -0.511420907565892, 0.5522989626074803],
-                [-0.5467142199110564, 98.50873077510872, -0.39455720483948653, 0.2338105167652813],
-                [-5.573997497222709, 99.1166942045121, -1.0503829692698758, 0.8561196559382651],
+                [3.332641568558043, 118.89672562263947,
+                 -0.511420907565892, 0.5522989626074803,
+                 0.3517323595191344, 0.5522989626074803],
+                [-0.5467142199110564, 98.50873077510872,
+                 -0.39455720483948653, 0.2338105167652813,
+                 0.21936086925539788, 0.39455720483948653],
+                [-5.573997497222709, 99.1166942045121,
+                 -1.0503829692698758, 0.8561196559382651,
+                 0.6434411926144998, 1.0503829692698758]
             ]
 
             fieldcache = fieldmodule.createFieldcache()
@@ -118,10 +127,13 @@ class FieldFitterTestCase(unittest.TestCase):
                 timeField.assignReal(fieldcache, [time])
                 minTemperature, maxTemperature = evaluate_field_nodeset_range(timeTemperature, nodes)
                 minDeltaTemperature, maxDeltaTemperature = evaluate_field_nodeset_range(deltaTimeTemperature, datapoints)
+                rmsError, maxError = fitter.getFieldDataRMSAndMaximumErrors("temperature", time)
                 self.assertAlmostEqual(minTemperature, expectedTemperatures[timeIndex][0], delta=TOL)
                 self.assertAlmostEqual(maxTemperature, expectedTemperatures[timeIndex][1], delta=TOL)
                 self.assertAlmostEqual(minDeltaTemperature, expectedTemperatures[timeIndex][2], delta=TOL)
                 self.assertAlmostEqual(maxDeltaTemperature, expectedTemperatures[timeIndex][3], delta=TOL)
+                self.assertAlmostEqual(rmsError, expectedTemperatures[timeIndex][4], delta=TOL)
+                self.assertAlmostEqual(maxError, expectedTemperatures[timeIndex][5], delta=TOL)
 
 
 if __name__ == "__main__":

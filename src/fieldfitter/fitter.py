@@ -1004,3 +1004,37 @@ class Fitter:
         gradientPenaltyObjective.setNumbersOfPoints(numberOfGaussPoints)
         gradientPenaltyObjective.setName("gradient penalty objective")
         return gradientPenaltyObjective
+
+    def getFieldDataRMSAndMaximumErrors(self, fieldName, time=0.0):
+        """
+        Get RMS and maximum data error magnitude for field of name.
+        For multi-component fields this is the magnitude of difference between vector.s
+        :param fieldName: Name of field to request fit errors for. Must have been fitted.
+        :param time: Time to evaluate at if time-varying.
+        :return: RMS error value, maximum error value.
+        Returns None, None if field was not fitted.
+        """
+        if not self.isFieldFitted(fieldName):
+            return None, None
+        with ChangeManager(self._fieldmodule):
+            datapoints = self._fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
+            field = self._fieldmodule.findFieldByName(fieldName).castFiniteElement()
+            hostField = self._fieldmodule.createFieldEmbedded(field, self._dataHostLocationField)
+            delta = hostField - field
+            error = self._fieldmodule.createFieldMagnitude(delta)
+            msError = self._fieldmodule.createFieldNodesetMeanSquares(error, datapoints)
+            rmsError = self._fieldmodule.createFieldSqrt(msError)
+            maxError = self._fieldmodule.createFieldNodesetMaximum(error, datapoints)
+            fieldcache = self._fieldmodule.createFieldcache()
+            fieldcache.setTime(time)
+            componentsCount = field.getNumberOfComponents()
+            rmsResult, rmsErrorValue = rmsError.evaluateReal(fieldcache, componentsCount)
+            maxResult, maxErrorValue = maxError.evaluateReal(fieldcache, componentsCount)
+            del fieldcache
+            del maxError
+            del rmsError
+            del msError
+            del error
+            del delta
+            del hostField
+        return rmsErrorValue if (rmsResult == RESULT_OK) else None, maxErrorValue if (maxResult == RESULT_OK) else None
